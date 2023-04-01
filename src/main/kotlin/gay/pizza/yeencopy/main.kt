@@ -6,7 +6,6 @@ import java.net.http.HttpRequest
 import java.net.http.HttpResponse.BodyHandlers
 import java.nio.file.Path
 import java.security.MessageDigest
-import javax.imageio.ImageIO
 import kotlin.io.path.Path
 import kotlin.io.path.createDirectories
 import kotlin.io.path.writeBytes
@@ -25,13 +24,11 @@ class Yeen(
 
 fun Yeen.key(): String = bytes.md5Hash().toHexString()
 
-fun Yeen.fileExtension(): String {
-  val readers = ImageIO.getImageReadersByMIMEType(type)
-  val format = if (readers.hasNext())
-    readers.next()
-  else
-    throw RuntimeException("Unknown Format: $type")
-  return format.formatName.lowercase()
+fun Yeen.fileExtension(): String = when (type) {
+  "image/jpeg" -> "jpg"
+  "image/png" -> "png"
+  "image/gif" -> "gif"
+  else -> "unk"
 }
 
 fun Yeen.write(path: Path): Unit = path.writeBytes(bytes)
