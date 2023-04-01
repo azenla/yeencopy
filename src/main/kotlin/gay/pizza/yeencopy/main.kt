@@ -6,6 +6,10 @@ import java.net.http.HttpRequest
 import java.net.http.HttpResponse.BodyHandlers
 import java.nio.file.Path
 import java.security.MessageDigest
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.ScheduledThreadPoolExecutor
+import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicInteger
 import kotlin.io.path.Path
 import kotlin.io.path.createDirectories
 import kotlin.io.path.writeBytes
@@ -44,35 +48,52 @@ fun YeenCollection.writeAll(path: Path) {
   }
 }
 
-class YeenSaturation(val limit: Int) {
-  val yeens = mutableMapOf<String, Yeen>()
-
-  var saturation: Int = 0
+class YeenSaturation(private val limit: Int) {
+  private val yeens = ConcurrentHashMap<String, Yeen>()
+  private val saturation = AtomicInteger(0)
 
   fun add(yeen: Yeen): Boolean {
     val key = yeen.key()
-    if (yeens.containsKey(key)) {
-      saturation++
-    } else {
-      yeens[key] = yeen
+    if (yeens.putIfAbsent(key, yeen) != null) {
+      saturation.incrementAndGet()
     }
-    return saturation >= limit
+    return saturation.get() >= limit
   }
 
   fun collection(): YeenCollection = YeenCollection(yeens)
 }
 
-class YeenCopy(val url: String, val httpClient: HttpClient = HttpClient.newHttpClient()) {
+class YeenCopy(private val url: String, private val parallelTriesCount: Int = 8) : AutoCloseable {
+  private val httpClient: HttpClient = HttpClient.newHttpClient()
+  private val pool = ScheduledThreadPoolExecutor(parallelTriesCount)
+
   fun copyUntilSaturation(saturationLimit: Int = 100): YeenCollection {
     val saturation = YeenSaturation(saturationLimit)
     while (true) {
-      val yeen = copyOne()
-      if (saturation.add(yeen)) break
+      if (runTriesParallel(saturation)) {
+        break
+      }
     }
     return saturation.collection()
   }
 
-  fun copyOne(): Yeen {
+  private fun runTriesParallel(saturation: YeenSaturation): Boolean {
+    val flag = AtomicBoolean()
+    for (i in 1..parallelTriesCount) {
+      pool.execute {
+        val yeen = copyOne()
+        if (saturation.add(yeen)) {
+          flag.set(true)
+        }
+      }
+    }
+    while (pool.activeCount > 0) {
+      Thread.sleep(1)
+    }
+    return flag.get()
+  }
+
+  private fun copyOne(): Yeen {
     val request = HttpRequest.newBuilder().GET()
       .uri(URI.create(url))
       .header("User-Agent", "Pizza-YeenCopy/1.0")
@@ -88,13 +109,17 @@ class YeenCopy(val url: String, val httpClient: HttpClient = HttpClient.newHttpC
         .orElse("image/unknown")
     )
   }
+
+  override fun close() {
+    pool.shutdownNow()
+  }
 }
 
 fun main(args: Array<String>) {
   val url = args[0]
   val copier = YeenCopy(url)
   val collection: YeenCollection
-  val timeInMillis = measureTimeMillis { collection = copier.copyUntilSaturation() }
+  val timeInMillis = measureTimeMillis { copier.use { collection = copier.copyUntilSaturation() } }
   println("Collected ${collection.yeens.size} yeens in ${timeInMillis / 1000.0} sec")
   collection.writeAll(Path("yeens"))
 }
