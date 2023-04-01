@@ -4,7 +4,7 @@ Copy [yeenserve](https://github.com/kubeliv/yeenserve) servers quickly and effic
 
 ## Usage
 
-Install a Java 17+ and run the following:
+Install Java 17+ and run the following:
 
 ```bash
 ./gradlew -q run --args 'https://hyena.photos'
