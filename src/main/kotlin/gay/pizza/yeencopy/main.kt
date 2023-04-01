@@ -24,9 +24,9 @@ fun ByteArray.toHexString(): String = joinToString("") { String.format("%02x", i
 class Yeen(
   val bytes: ByteArray,
   val type: String
-)
-
-fun Yeen.key(): String = bytes.md5Hash().toHexString()
+) {
+  val key: String = bytes.md5Hash().toHexString()
+}
 
 fun Yeen.fileExtension(): String = when (type) {
   "image/jpeg" -> "jpg"
@@ -53,8 +53,7 @@ class YeenSaturation(private val limit: Int) {
   private val saturation = AtomicInteger(0)
 
   fun add(yeen: Yeen): Boolean {
-    val key = yeen.key()
-    if (yeens.putIfAbsent(key, yeen) != null) {
+    if (yeens.putIfAbsent(yeen.key, yeen) != null) {
       saturation.incrementAndGet()
     }
     return saturation.get() >= limit
@@ -120,6 +119,6 @@ fun main(args: Array<String>) {
   val copier = YeenCopy(url)
   val collection: YeenCollection
   val timeInMillis = measureTimeMillis { copier.use { collection = copier.copyUntilSaturation() } }
-  println("Collected ${collection.yeens.size} yeens in ${timeInMillis / 1000.0} sec")
+  println("Collected ${collection.yeens.size} yeens in ${timeInMillis / 1000.0} seconds")
   collection.writeAll(Path("yeens"))
 }
