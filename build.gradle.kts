@@ -23,6 +23,8 @@ java {
 dependencies {
   implementation("org.jetbrains.kotlin:kotlin-bom")
   implementation("org.jetbrains.kotlin:kotlin-stdlib-jdk8")
+  implementation("io.ktor:ktor-client-cio:2.2.4")
+  implementation("org.slf4j:slf4j-simple:2.0.7")
 }
 
 tasks.withType<KotlinCompile> {
