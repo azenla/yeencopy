@@ -31,7 +31,7 @@ class YeenClient(val baseUrl: String, val concurrency: Int = 16) : AutoCloseable
     return Yeen(fullUrl)
   }
 
-  suspend fun fetchYeensUntilSaturation(saturationLimit: Int = 100): List<Yeen> {
+  suspend fun fetchYeensUntilSaturation(saturationLimit: Int = 200): List<Yeen> {
     val yeens = mutableSetOf<Yeen>()
     var saturation = 0
     while (saturation < saturationLimit) {
