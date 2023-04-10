@@ -8,20 +8,28 @@ import io.ktor.http.*
 import kotlinx.coroutines.*
 import java.net.URL
 import java.nio.file.Path
+import java.util.concurrent.atomic.AtomicInteger
 import kotlin.io.path.*
 import kotlin.system.measureTimeMillis
 
 data class Yeen(val url: String)
 
 class YeenClient(val baseUrl: String, val concurrency: Int = 16) : AutoCloseable {
+  private val counter = AtomicInteger(0)
   private val client = HttpClient()
+
+  val attempts: Int
+    get() = counter.get()
 
   suspend fun fetchRandomYeen(): Yeen {
     val response = client.get(baseUrl) { yeencopy() }.check()
-    return Yeen(baseUrl + response.body<String>().split("src=\"")[1].split("\"")[0].trim())
+    val yeen = Yeen(baseUrl + response.body<String>().split("src=\"")[1]
+      .split("\"")[0].trim().replace(" ", "%20"))
+    counter.incrementAndGet()
+    return yeen
   }
 
-  suspend fun fetchYeensUntilSaturation(saturationLimit: Int = 200): List<Yeen> {
+  suspend fun fetchYeensUntilSaturation(saturationLimit: Int = 500): List<Yeen> {
     val yeens = mutableSetOf<Yeen>()
     var saturation = 0
     while (saturation < saturationLimit)
@@ -34,7 +42,7 @@ class YeenClient(val baseUrl: String, val concurrency: Int = 16) : AutoCloseable
   }
 
   suspend fun downloadYeen(yeen: Yeen, directory: Path): Path {
-    val name = Path(URL(yeen.url).path).fileName.toString()
+    val name = Path(URL(yeen.url).path.replace("%20", " ")).fileName.toString()
     val path = directory.resolve(name)
     val bytes = client.get(yeen.url) { yeencopy() }.check().body<ByteArray>()
     path.writeBytes(bytes)
@@ -62,7 +70,7 @@ fun main(args: Array<String>): Unit = runBlocking {
   YeenClient(if (args.isEmpty()) "https://hyena.photos" else args[0]).use { client ->
     val yeens: List<Yeen>
     val discoveryTimeInMillis = measureTimeMillis { yeens = client.fetchYeensUntilSaturation() }
-    println("Discovered ${yeens.size} yeens in ${discoveryTimeInMillis / 1000.0} seconds")
+    println("Discovered ${yeens.size} yeens in ${discoveryTimeInMillis / 1000.0} seconds (${client.attempts} requests)")
     val downloadTimeInMillis = measureTimeMillis { client.downloadAllYeens(yeens, Path("yeens")) }
     println("Downloaded ${yeens.size} yeens in ${downloadTimeInMillis / 1000.0} seconds")
   }
